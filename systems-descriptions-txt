@@ -1,0 +1,49 @@
+Vas a crear un API con [FastAPI Standar]. esta API debe permitir:
+
+1. Crear un pedido con los siguientes datos:
+- id
+- fecha
+- cliente
+- productos
+- total
+- estado
+
+2. mostrar todos los pedidos activos
+
+3. mostrar un pedido en especifico 
+
+4. actualizar el estado de un pedido
+
+5. eliminar un pedido  o cancelar un pedido
+
+
+6. reservar mesa 
+
+7. mostrar todas las reservas activas
+
+8. mostrar una reserva en especifico
+
+9. actualizar el estado de una reserva
+- id
+- fecha
+- cliente
+- mesa
+- estado
+
+10. eliminar una reserva o cancelar una reserva
+
+
+11. pagar un pedido
+
+12. mostrar todos los pagos al dia
+
+13. mostrar un pago en especifico
+
+14. eliminar un pago
+
+
+la base de datos debe ser tipo SQL: SQLITE
+Denes utilizar un ORM para la base de datos
+utiliza clean architecture para la estructura del proyecto 
+Evita usar operaciones asincronas 
+
