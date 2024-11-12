@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.domain.models.order import Order
 from app.domain.schemas.order import OrderCreate, Order as OrderSchema
 from app.domain.models.product import PRODUCT_PRICES, get_product_price
-from typing import List
+from typing import List, Optional
+from datetime import datetime
 import json
 
 router = APIRouter()
@@ -53,13 +54,150 @@ def create_order(order: OrderCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/", response_model=List[OrderSchema])
-def get_active_orders(db: Session = Depends(get_db)):
-    orders = db.query(Order).filter(Order.status != "cancelled").all()
-    for order in orders:
-        order.items = json.loads(order.items)
-    return orders
+def get_orders(
+    status: Optional[str] = Query(None, description="Filtrar por estado (pending, completed, cancelled)"),
+    client: Optional[str] = Query(None, description="Filtrar por nombre del cliente"),
+    date_from: Optional[datetime] = Query(None, description="Filtrar desde fecha (YYYY-MM-DD)"),
+    date_to: Optional[datetime] = Query(None, description="Filtrar hasta fecha (YYYY-MM-DD)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtiene la lista de pedidos con opciones de filtrado.
+    """
+    try:
+        # Iniciar la consulta
+        query = db.query(Order)
 
-# Agregar un endpoint para obtener los productos disponibles
+        # Aplicar filtros si se proporcionan
+        if status:
+            query = query.filter(Order.status == status)
+        if client:
+            query = query.filter(Order.client.ilike(f"%{client}%"))
+        if date_from:
+            query = query.filter(Order.date >= date_from)
+        if date_to:
+            query = query.filter(Order.date <= date_to)
+
+        # Ordenar por fecha, más recientes primero
+        query = query.order_by(Order.date.desc())
+
+        # Ejecutar la consulta
+        orders = query.all()
+
+        # Convertir items de JSON a lista para cada orden
+        for order in orders:
+            order.items = json.loads(order.items)
+
+        return orders
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al obtener los pedidos: {str(e)}"
+        )
+
+@router.get("/summary")
+def get_orders_summary(
+    date_from: Optional[datetime] = Query(None, description="Desde fecha (YYYY-MM-DD)"),
+    date_to: Optional[datetime] = Query(None, description="Hasta fecha (YYYY-MM-DD)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtiene un resumen de los pedidos activos (no cancelados).
+    """
+    try:
+        # Iniciar la consulta excluyendo órdenes canceladas
+        query = db.query(Order).filter(Order.status != "cancelled")
+
+        # Aplicar filtros de fecha si se proporcionan
+        if date_from:
+            query = query.filter(Order.date >= date_from)
+        if date_to:
+            query = query.filter(Order.date <= date_to)
+
+        # Ejecutar la consulta
+        orders = query.all()
+
+        # Calcular estadísticas
+        total_orders = len(orders)
+        total_revenue = sum(order.total for order in orders)
+        
+        # Contar órdenes por estado (excluyendo canceladas)
+        orders_by_status = {}
+        
+        # Contar productos más vendidos
+        product_counts = {}
+        for order in orders:
+            # Contar por estado
+            status = order.status
+            if status not in orders_by_status:
+                orders_by_status[status] = 0
+            orders_by_status[status] += 1
+            
+            # Contar productos
+            items = json.loads(order.items)
+            for item in items:
+                product = item['product']
+                quantity = item['quantity']
+                if product not in product_counts:
+                    product_counts[product] = 0
+                product_counts[product] += quantity
+
+        # Ordenar productos por cantidad vendida
+        top_products = sorted(
+            [{"product": k, "quantity": v} for k, v in product_counts.items()],
+            key=lambda x: x["quantity"],
+            reverse=True
+        )[:5]  # Top 5 productos
+
+        return {
+            "total_orders": total_orders,
+            "total_revenue": round(total_revenue, 2),
+            "orders_by_status": orders_by_status,
+            "top_products": top_products,
+            "date_range": {
+                "from": date_from,
+                "to": date_to
+            }
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al obtener el resumen de pedidos: {str(e)}"
+        )
+
+@router.get("/cancelled", response_model=List[OrderSchema])
+def get_cancelled_orders(
+    date_from: Optional[datetime] = Query(None, description="Desde fecha (YYYY-MM-DD)"),
+    date_to: Optional[datetime] = Query(None, description="Hasta fecha (YYYY-MM-DD)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtiene la lista de pedidos cancelados.
+    """
+    try:
+        query = db.query(Order).filter(Order.status == "cancelled")
+
+        if date_from:
+            query = query.filter(Order.date >= date_from)
+        if date_to:
+            query = query.filter(Order.date <= date_to)
+
+        orders = query.order_by(Order.date.desc()).all()
+
+        # Convertir items de JSON a lista para cada orden
+        for order in orders:
+            order.items = json.loads(order.items)
+
+        return orders
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al obtener los pedidos cancelados: {str(e)}"
+        )
+
 @router.get("/products")
 def get_available_products():
     return {
