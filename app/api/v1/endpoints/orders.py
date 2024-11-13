@@ -54,10 +54,23 @@ def create_order(order: OrderCreate, db: Session = Depends(get_db)):
 
 @router.get("/", response_model=List[OrderSchema])
 def get_active_orders(db: Session = Depends(get_db)):
-    orders = db.query(Order).filter(Order.status != "cancelled").all()
-    for order in orders:
-        order.items = json.loads(order.items)
-    return orders
+    """
+    Obtiene la lista de pedidos activos (no cancelados).
+    """
+    try:
+        orders = db.query(Order).filter(Order.status != "cancelled").all()
+        
+        # Convertir items de JSON a lista para cada orden
+        for order in orders:
+            order.items = json.loads(order.items)
+
+        return orders
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al obtener los pedidos: {str(e)}"
+        )
 
 # Agregar un endpoint para obtener los productos disponibles
 @router.get("/products")
@@ -131,3 +144,23 @@ def cancel_order(order_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         print(f"Error al cancelar la orden: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/all", response_model=List[OrderSchema])
+def get_all_orders(db: Session = Depends(get_db)):
+    """
+    Obtiene todas las órdenes, independientemente de su estado.
+    """
+    try:
+        orders = db.query(Order).all()
+        
+        # Convertir items de JSON a lista para cada orden
+        for order in orders:
+            order.items = json.loads(order.items)
+
+        return orders
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al obtener todas las órdenes: {str(e)}"
+        )
